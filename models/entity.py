@@ -1,24 +1,25 @@
 from abc import ABC, abstractmethod
-from datetime import datetime
 
 
 class Entity(ABC):
-    """Clase abstracta base para todas las entidades del sistema (Cliente, Reserva, etc.)."""
+    """Clase abstracta base para las entidades del sistema de Software FJ."""
 
     def __init__(self, entity_id):
-        self._id = entity_id
-        self._created_at = datetime.now()
+        if not isinstance(entity_id, str) or entity_id.strip() == "":
+            raise ValueError("El identificador de la entidad no puede estar vacío")
+        self._entity_id = entity_id.strip()
 
     def get_id(self):
-        return self._id
-
-    def get_created_at(self):
-        return self._created_at
+        """Retorna el identificador único de la entidad."""
+        return self._entity_id
 
     @abstractmethod
     def validate(self):
-        pass
+        """Valida que los datos de la entidad sean correctos."""
 
     @abstractmethod
     def get_description(self):
-        pass
+        """Retorna una descripción general de la entidad."""
+
+    def __str__(self):
+        return self.get_description()
