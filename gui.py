@@ -21,30 +21,12 @@ class SoftwareFJApp:
         self.root.geometry("980x680")
         self.root.minsize(900, 620)
 
-        # Gestión de datos en memoria (sin base de datos)
         self.clientes = []
         self.servicios = []
         self.reservas = []
 
-        self._precargar_datos_iniciales()
         self._construir_interfaz()
         self._refrescar_todo()
-
-    def _precargar_datos_iniciales(self):
-        """Carga algunos clientes y servicios base para facilitar pruebas inmediatas."""
-        try:
-            self.clientes.extend([
-                Client("CLI-001", "Laura Gómez", "laura.gomez@empresa.com", "3104567890"),
-                Client("CLI-002", "Carlos Mendoza", "cmendoza@techcol.co", "3209876543"),
-            ])
-            self.servicios.extend([
-                ReserveRoom("SRV-001", "Sala Ejecutiva A", 80000.0, 101),
-                RentEquipment("SRV-002", "Portátil Dell Precision", 45000.0, 5),
-                SpecializedConsulting("SRV-003", "Asesoría Cloud", 150000.0, "Ing. Héctor Aguilar"),
-            ])
-            logger.info("Datos iniciales cargados en memoria para la interfaz gráfica.")
-        except SoftwareFJError as error:
-            log_error(logger, error, "Error cargando datos iniciales en GUI")
 
     def _construir_interfaz(self):
         header = tk.Frame(self.root, bg="#1f2d3d", height=55)
@@ -311,7 +293,6 @@ class SoftwareFJApp:
         )
         btn_crear_res.grid(row=1, column=4, columnspan=2, pady=6)
 
-        # Panel de acciones sobre reserva seleccionada
         frame_acciones = ttk.LabelFrame(
             self.tab_reservas, text="Gestionar Reserva Seleccionada (Confirmar / Procesar / Cancelar)", padding=10
         )
@@ -485,11 +466,13 @@ class SoftwareFJApp:
 
     def _correr_simulacion(self):
         try:
-            ejecutar_simulacion()
-            self._cargar_logs()
+            self.clientes, self.servicios, self.reservas = ejecutar_simulacion(
+                self.clientes, self.servicios, self.reservas
+            )
+            self._refrescar_todo()
             messagebox.showinfo(
                 "Simulación Finalizada",
-                "Las operaciones de simulación se ejecutaron y registraron en el archivo de logs.",
+                "La simulación se ejecutó y se actualizaron las listas en memoria.",
             )
         except Exception as error:
             log_error(logger, error, "Error ejecutando simulación desde GUI")
