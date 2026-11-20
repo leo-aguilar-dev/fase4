@@ -6,7 +6,9 @@ from models.exceptions import (
     OperationNotAllowedError,
     ReservationError,
     ServiceUnavailableError,
+    SoftwareFJError,
 )
+from models.service_rent_equipment import RentEquipment
 from utils.logger import get_logger, log_error
 
 STATUS_PENDING = "PENDIENTE"
@@ -37,7 +39,7 @@ class Reservation(Entity):
 
         try:
             self.validate()
-        except (MissingParameterError, InvalidDataError) as error:
+        except (MissingParameterError, InvalidDataError, SoftwareFJError) as error:
             log_error(logger, error, f"Reserva {entity_id} rechazada")
             raise ReservationError(f"No se pudo crear la reserva {entity_id}") from error
         else:
@@ -75,8 +77,10 @@ class Reservation(Entity):
             raise InvalidDataError("La duración debe ser un número")
         if self.__duration <= 0 or self.__duration > MAX_DURATION:
             raise InvalidDataError(f"La duración debe estar entre 1 y {MAX_DURATION}")
-        if self.__units is not None and (not isinstance(self.__units, int) or self.__units <= 0):
+        if self.__units is not None and (isinstance(self.__units, bool) or not isinstance(self.__units, int) or self.__units <= 0):
             raise InvalidDataError("Las unidades deben ser un entero positivo")
+        if isinstance(self.__service, RentEquipment) and self.__units is None:
+            raise MissingParameterError("units")
 
     def get_description(self):
         service_description = self.__service.get_description()
@@ -90,20 +94,14 @@ class Reservation(Entity):
             return self.__client.get_name()
         return str(self.__client)
 
-    def _get_service_args(self):
-        """Arma los argumentos para el servicio según si necesita unidades o no."""
-        if self.__units is not None:
-            return (self.__duration, self.__units)
-        return (self.__duration,)
-
     def calculate_base_cost(self):
         """Calcula el costo usando el método polimórfico calculate_cost del servicio."""
         try:
-            cost = self.__service.calculate_cost(*self._get_service_args())
-        except (ValueError, TypeError) as error:
+            cost = self.__service.calculate_cost(self.__duration, self.__units)
+        except (ValueError, TypeError, SoftwareFJError) as error:
             raise CalculationError(f"El servicio no pudo calcular el costo de la reserva {self.get_id()}") from error
 
-        if not isinstance(cost, (int, float)) or cost < 0:
+        if isinstance(cost, bool) or not isinstance(cost, (int, float)) or cost < 0:
             raise CalculationError(f"Costo inconsistente obtenido: {cost}")
         return float(cost)
 
@@ -116,9 +114,9 @@ class Reservation(Entity):
         """
         base_cost = self.calculate_base_cost()
 
-        if tax_rate is not None and (not isinstance(tax_rate, (int, float)) or not 0 <= tax_rate <= 1):
+        if tax_rate is not None and (isinstance(tax_rate, bool) or not isinstance(tax_rate, (int, float)) or not 0 <= tax_rate <= 1):
             raise CalculationError(f"Tasa de impuesto inválida: {tax_rate}")
-        if discount is not None and (not isinstance(discount, (int, float)) or not 0 <= discount <= MAX_DISCOUNT):
+        if discount is not None and (isinstance(discount, bool) or not isinstance(discount, (int, float)) or not 0 <= discount <= MAX_DISCOUNT):
             raise CalculationError(f"Descuento inválido: {discount} (máximo {MAX_DISCOUNT})")
 
         total = base_cost
@@ -136,10 +134,13 @@ class Reservation(Entity):
                     f"No se puede confirmar la reserva {self.get_id()} en estado {self.__status}"
                 )
             try:
-                self.__service.validate(*self._get_service_args()[1:])
+                if isinstance(self.__service, RentEquipment):
+                    self.__service.reserve_units(self.__units)
+                else:
+                    self.__service.validate()
             except (ValueError, TypeError) as error:
                 raise ServiceUnavailableError(self.__service.get_name()) from error
-        except (OperationNotAllowedError, ServiceUnavailableError) as error:
+        except (OperationNotAllowedError, ServiceUnavailableError, SoftwareFJError) as error:
             log_error(logger, error, f"Confirmación fallida de reserva {self.get_id()}")
             raise
         else:
@@ -154,6 +155,9 @@ class Reservation(Entity):
             )
             log_error(logger, error)
             raise error
+        
+        if self.__status == STATUS_CONFIRMED and isinstance(self.__service, RentEquipment):
+            self.__service.release_units(self.__units)
 
         self.__status = STATUS_CANCELLED
         logger.info(f"Reserva {self.get_id()} cancelada")

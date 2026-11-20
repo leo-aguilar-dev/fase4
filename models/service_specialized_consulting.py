@@ -1,19 +1,23 @@
-from service import Service
+from models.exceptions import InvalidDataError, MissingParameterError
+from models.service import Service
+
 
 class SpecializedConsulting(Service):
-    def __init__(self, name, cost, consultant_name):
-        super().__init__(name, cost)
-        self.consultant_name = consultant_name
+    def __init__(self, entity_id, name, cost, consultant_name):
+        super().__init__(entity_id, name, cost)
+        if consultant_name is None or not isinstance(consultant_name, str) or not consultant_name.strip():
+            raise MissingParameterError("consultant_name")
+        self.consultant_name = consultant_name.strip()
+        self.validate()
 
-    def calculate_cost(self, hours):
-        if hours < 0:
-            raise ValueError("El número de horas no puede ser negativo")
-        
-        return self.get_cost() * hours
+    def calculate_cost(self, duration, units=None):
+        if isinstance(duration, bool) or not isinstance(duration, (int, float)) or duration <= 0:
+            raise InvalidDataError("El número de horas debe ser un número positivo")
+        return round(self.get_cost() * duration, 2)
 
     def get_description(self):
-        return f"Consultoría especializada con {self.consultant_name}"
+        return f"Consultoría especializada '{self.get_name()}' con {self.consultant_name}"
 
-    def validate(self):
-        if not isinstance(self.consultant_name, str) or not self.consultant_name:
-            raise ValueError("El nombre del consultor debe ser una cadena no vacía")
+    def validate(self, units=None):
+        if not isinstance(self.consultant_name, str) or not self.consultant_name.strip():
+            raise InvalidDataError("El nombre del consultor debe ser una cadena no vacía")
